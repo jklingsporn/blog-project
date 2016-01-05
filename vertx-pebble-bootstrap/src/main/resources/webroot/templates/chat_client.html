@@ -1,0 +1,122 @@
+{% extends './base.html' %}
+{% block content %}
+    <h1>Chat Client</h1>
+    <p class="lead">
+    <div class="row">
+        <div class="col-md-2">
+            <label>Username</label>
+            <input id="username" type="text" class="form-control"/>
+        </div>
+        <div class="openOnConnect collapse">
+            <div class="col-md-2">
+                <label>Action</label>
+                <select id="action" class="form-control">
+                    <option value="broadcast" selected>Broadcast</option>
+                </select>
+            </div>
+            <div class="col-md-8">
+                <label>Message</label>
+                <textarea id="messageBody" class="form-control" placeholder="some text"></textarea>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <br/>
+        <div class="col-md-2">
+            <button class="form-control btn btn-default" value="Connect" onclick="connect()">Connect</button>
+        </div>
+        <div class="col-md-1 openOnConnect collapse">
+            <button class="btn btn-success" value="Send" onclick="send()">Send <span class="glyphicon glyphicon-cloud-upload"></span></button>
+        </div>
+    </div>
+    <div class="row col-md-12">
+        <h2>Output</h2>
+        <div id="output"></div>
+    </div>
+{% endblock content%}
+{% block footer %}
+<script type="application/javascript">
+
+    var connection;
+    var output;
+
+    function connect(){
+        output = $('#output');
+        connection = new WebSocket('ws://localhost:8080/ws/websocket/');
+        connection.binaryType = 'arraybuffer';
+        connection.onopen = function () {
+            sendInternal($('#username').val(),'joined');
+            $(".openOnConnect").collapse('toggle');
+        };
+
+        // Log errors
+        connection.onerror = function (error) {
+            $(".openOnConnect").collapse('toggle');
+        };
+
+        // Log messages from the server
+        connection.onmessage = function (e) {
+            if(e.data != 'n'){
+                var dataBytes = new Uint8Array(e.data);
+                appendResponse(String.fromCharCode.apply(null, dataBytes));
+            }
+        };
+        connection.onclose = function(e){
+            appendToDocument("alert-danger","glyphicon-exclamation-sign","Remote closed connection.");
+        };
+    }
+
+    function send(){
+        sendInternal($("#username").val(),$("#messageBody").val());
+    }
+
+    function sendInternal(username,body){
+        var message = {};
+        message.username = username;
+        message.body = body;
+        appendAndSend(message);
+    }
+
+    function appendAndSend(message){
+        appendRequest(message);
+        connection.send(JSON.stringify(message));
+    }
+
+    function appendResponse(message){
+        var asJson = JSON.parse(message);
+        if(asJson.failure != null){
+            appendToDocument("alert-warning","glyphicon-cloud-download",message.body)
+        }else if(asJson.error != null){
+            appendToDocument("alert-danger","glyphicon-cloud-download",message.body)
+        }else{
+            appendToDocument("alert-success","glyphicon-cloud-download",asJson.username+': '+asJson.body)
+        }
+    }
+
+    function appendRequest(message){
+        appendToDocument("alert-info","glyphicon-cloud-upload",message.body)
+    }
+
+    function appendToDocument(divClass,prefix,message){
+        var pre = document.createElement("p");
+        pre.style.wordWrap = "break-word";
+        var html = '<div class="col-md-12 alert '+divClass+'"><span class="glyphicon '+prefix+'"></span> '+getTime()+'<br/>'+message+'</div>';
+        pre.innerHTML = html;
+        output.prepend(pre);
+    }
+
+    function getTime(){
+        var time = new Date();
+        return time.getHours()+':'+time.getMinutes()+':'+time.getSeconds()+'.'+time.getMilliseconds();
+    }
+
+    function disconnect(){
+        if(connection != null){
+            connection.onclose = function () {}; // disable onclose handler first
+            connection.close()
+        }
+    }
+
+    window.onbeforeunload = disconnect();
+</script>
+{% endblock footer %}
